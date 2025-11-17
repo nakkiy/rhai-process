@@ -50,7 +50,6 @@ Host applications use `Config` to control what Rhai scripts may execute.
 | `allow_commands([...])` / `deny_commands([...])` | Whitelist or blacklist executable names (mutually exclusive). When unspecified, all commands are allowed. |
 | `allow_env_vars([...])` / `deny_env_vars([...])` | Restrict which environment-variable keys scripts may override (mutually exclusive). Unset means all keys are allowed. |
 | `default_timeout_ms(ms)` | Default timeout in milliseconds. Zero or negative values are rejected. Call `Executor::timeout(ms)` to override per pipeline. |
-| `allowed_workdirs([...])` | Planned: restrict working directories to the listed paths. Unset means no directory restriction. |
 
 > Every `CommandBuilder` consults this policy before launching. Violations raise an immediate Rhai error and the external process is never started.
 
