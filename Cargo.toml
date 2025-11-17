@@ -1,0 +1,25 @@
+[package]
+name = "rhai-process"
+version = "0.1.0"
+edition = "2021"
+description = "Expose safe process-execution helpers to Rhai scripts."
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/nakkiy/rhai-process"
+repository = "https://github.com/nakkiy/rhai-process"
+documentation = "https://docs.rs/rhai-process"
+keywords = ["scripting", "rhai", "process", "cli", "automation"]
+categories = ["embedded"]
+
+[features]
+default = []
+no_index = ["rhai/no_index"]
+sync = ["rhai/sync"]
+metadata = ["rhai/metadata"]
+
+[dependencies]
+rhai = { version = "1.23" }
+duct = "0.13"
+
+[dev-dependencies]
+tempfile = "3"
