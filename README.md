@@ -56,14 +56,14 @@ Host applications use `Config` to control what Rhai scripts may execute.
 
 ## CommandBuilder
 ```rhai
-  let build = cmd(["cargo", "build"])
-                 .cwd(repo_dir)
-                 .env(#{ "RUSTFLAGS": "-Dwarnings" });
+  let run = cmd(["cargo", "build"])
+                .env(#{ "RUSTFLAGS": "-Dwarnings" })
+                .exec()
+                .cwd(repo_dir);
 ```
 | Method | Description |
 | ------ | ----------- |
 | `cmd([cmd, opt, ...])` | Create a builder by passing the program name and arguments as an array. |
-| `cwd(path)` | Set or clear the working directory for this command. |
 | `env(map)` / `env_var(key, value)` | Inject environment variables (collectively or individually). Keys must be allowed by `Config`. |
 | `pipe(other_builder)` | Append another `CommandBuilder` via a pipe and return a `PipeBuilder`. |
 | `exec()` | Turn this single command into an `Executor`, which exposes timeout/exit-code controls and `capture()`. |
@@ -78,6 +78,7 @@ Host applications use `Config` to control what Rhai scripts may execute.
 | Method | Description |
 | ------ | ----------- |
 | `timeout(ms)` | Override the pipeline-wide timeout in milliseconds (`Config::default_timeout_ms` is used otherwise). |
+| `cwd(path)` | Set the working directory for the entire pipeline. |
 | `allow_exit_codes(array)` | Treat the listed exit codes as successes. |
 | `capture()` | Execute the pipeline and return `#{ success, status, stdout, stderr, duration_ms }`. |
 

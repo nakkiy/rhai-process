@@ -6,6 +6,7 @@ use duct::{self, Expression};
 use rhai::{Dynamic, Map as RhaiMap, INT};
 use std::collections::HashSet;
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -16,6 +17,7 @@ pub struct PipelineExecutor {
     pub(crate) commands: Vec<CommandSpec>,
     pub(crate) timeout_override_ms: Option<u64>,
     pub(crate) allowed_exit_codes: Option<HashSet<i64>>,
+    pub(crate) cwd: Option<PathBuf>,
 }
 
 impl PipelineExecutor {
@@ -25,7 +27,17 @@ impl PipelineExecutor {
             commands,
             timeout_override_ms: None,
             allowed_exit_codes: None,
+            cwd: None,
         }
+    }
+
+    pub fn cwd(mut self, path: String) -> RhaiResult<Self> {
+        if path.is_empty() {
+            self.cwd = None;
+        } else {
+            self.cwd = Some(PathBuf::from(path));
+        }
+        Ok(self)
     }
 
     pub fn timeout(mut self, timeout: INT) -> RhaiResult<Self> {
@@ -51,7 +63,12 @@ impl PipelineExecutor {
 
     pub fn capture(self) -> RhaiResult<RhaiMap> {
         let timeout = self.timeout_override_ms.or(self.config.default_timeout_ms);
-        let result = run_pipeline(&self.commands, timeout, self.allowed_exit_codes.clone())?;
+        let result = run_pipeline(
+            &self.commands,
+            timeout,
+            self.allowed_exit_codes.clone(),
+            self.cwd,
+        )?;
         Ok(result.into_map())
     }
 }
@@ -82,11 +99,12 @@ fn run_pipeline(
     commands: &[CommandSpec],
     timeout_ms: Option<u64>,
     allowed_exit_codes: Option<HashSet<i64>>,
+    cwd: Option<PathBuf>,
 ) -> RhaiResult<ProcessResult> {
     if commands.is_empty() {
         return Err(runtime_error("no command specified"));
     }
-    let mut expression = build_expression(commands)?;
+    let mut expression = build_expression(commands, cwd.as_ref())?;
     expression = expression.stdout_capture().stderr_capture().unchecked();
     let start = Instant::now();
     let output = match timeout_ms {
@@ -113,23 +131,23 @@ fn run_pipeline(
     })
 }
 
-fn build_expression(commands: &[CommandSpec]) -> RhaiResult<Expression> {
+fn build_expression(commands: &[CommandSpec], cwd: Option<&PathBuf>) -> RhaiResult<Expression> {
     let mut iter = commands.iter();
     let first = iter
         .next()
         .ok_or_else(|| runtime_error("no command specified"))?;
-    let mut expression = expression_from_spec(first);
+    let mut expression = expression_from_spec(first, cwd);
     for command in iter {
-        let next_expr = expression_from_spec(command);
+        let next_expr = expression_from_spec(command, cwd);
         expression = expression.pipe(next_expr);
     }
     Ok(expression)
 }
 
-fn expression_from_spec(spec: &CommandSpec) -> Expression {
+fn expression_from_spec(spec: &CommandSpec, cwd: Option<&PathBuf>) -> Expression {
     let mut expr = duct::cmd(spec.program.clone(), spec.args.clone());
-    if let Some(cwd) = &spec.cwd {
-        expr = expr.dir(cwd.clone());
+    if let Some(dir) = cwd {
+        expr = expr.dir(dir.clone());
     }
     for (key, value) in &spec.env {
         expr = expr.env(key, value);

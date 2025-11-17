@@ -1,10 +1,12 @@
 use rhai::{Engine, EvalAltResult};
-use rhai_process::{register, Config};
+use rhai_process::{module, register, Config};
 use tempfile::tempdir;
 
 fn engine_with(config: Config) -> Engine {
     let mut engine = Engine::new();
+    let process_module = module(config.clone());
     register(&mut engine, config);
+    engine.register_static_module("process", process_module.into());
     engine
 }
 
@@ -166,7 +168,10 @@ fn cwd_switches_directory() -> Result<(), Box<EvalAltResult>> {
     let dir_str = dir.path().to_str().unwrap();
     let script = format!(
         r#"
-        let result = process::cmd(["ls"]).cwd("{dir}").exec().capture();
+        let result = process::cmd(["ls"])
+            .exec()
+            .cwd("{dir}")
+            .capture();
         result.stdout.contains("hello.txt")
         "#,
         dir = dir_str
@@ -180,7 +185,10 @@ fn cwd_switches_directory() -> Result<(), Box<EvalAltResult>> {
 fn cwd_invalid_directory_errors() {
     let engine = engine_with(Config::default());
     let script = r#"
-        process::cmd(["ls"]).cwd("/definitely/not/a/dir").exec().capture();
+        process::cmd(["ls"])
+            .exec()
+            .cwd("/definitely/not/a/dir")
+            .capture();
         true
     "#;
     let err = engine

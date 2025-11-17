@@ -72,11 +72,6 @@ fn attach_custom_types(module: &mut Module) {
 pub mod builder_api_module {
     use super::*;
 
-    #[rhai_fn(name = "cwd")]
-    pub fn builder_cwd(builder: CommandBuilder, path: ImmutableString) -> CommandBuilder {
-        builder.with_cwd(path.into())
-    }
-
     #[rhai_fn(name = "env", return_raw)]
     pub fn builder_env(builder: CommandBuilder, map: RhaiMap) -> crate::RhaiResult<CommandBuilder> {
         builder.with_env_map(map)
@@ -115,6 +110,14 @@ pub mod builder_api_module {
     #[rhai_fn(name = "exec")]
     pub fn pipeline_exec(pipeline: PipeBuilder) -> PipelineExecutor {
         pipeline.exec()
+    }
+
+    #[rhai_fn(name = "cwd", return_raw)]
+    pub fn executor_cwd(
+        executor: PipelineExecutor,
+        path: ImmutableString,
+    ) -> crate::RhaiResult<PipelineExecutor> {
+        executor.cwd(path.into())
     }
 
     #[rhai_fn(name = "timeout", return_raw)]

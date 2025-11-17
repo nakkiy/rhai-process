@@ -5,7 +5,6 @@ use crate::pipeline_executor::PipelineExecutor;
 use crate::util::{dynamic_to_string, runtime_error};
 use crate::{RhaiArray, RhaiResult};
 use rhai::Map as RhaiMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -35,15 +34,6 @@ impl CommandBuilder {
             config,
             command: CommandSpec::new(program, arg_list),
         })
-    }
-
-    pub(crate) fn with_cwd(mut self, path: String) -> Self {
-        if path.is_empty() {
-            self.command.cwd = None;
-        } else {
-            self.command.cwd = Some(PathBuf::from(path));
-        }
-        self
     }
 
     pub(crate) fn with_env_map(mut self, map: RhaiMap) -> RhaiResult<Self> {
