@@ -12,8 +12,8 @@ fn main() -> Result<(), Box<EvalAltResult>> {
         r#"
         let result = cmd(["ls"])
                         .pipe(cmd(["grep", "Cargo.toml"]))
-                        .exec()
-                        .capture();
+                        .build()
+                        .run();
 
         if result.success {
             result.stdout

@@ -61,7 +61,7 @@ impl PipelineExecutor {
         Ok(self)
     }
 
-    pub fn capture(self) -> RhaiResult<RhaiMap> {
+    pub fn run(self) -> RhaiResult<RhaiMap> {
         let timeout = self.timeout_override_ms.or(self.config.default_timeout_ms);
         let result = run_pipeline(
             &self.commands,

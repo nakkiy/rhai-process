@@ -59,7 +59,7 @@ impl CommandBuilder {
         Ok(builder)
     }
 
-    pub(crate) fn exec(self) -> PipelineExecutor {
+    pub(crate) fn build(self) -> PipelineExecutor {
         PipeBuilder::from_single(self.config, self.command).into_executor()
     }
 }

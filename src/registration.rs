@@ -94,9 +94,9 @@ pub mod builder_api_module {
         builder.pipe(next)
     }
 
-    #[rhai_fn(name = "exec")]
-    pub fn builder_exec(builder: CommandBuilder) -> PipelineExecutor {
-        builder.exec()
+    #[rhai_fn(name = "build")]
+    pub fn builder_build(builder: CommandBuilder) -> PipelineExecutor {
+        builder.build()
     }
 
     #[rhai_fn(name = "pipe", return_raw)]
@@ -107,9 +107,9 @@ pub mod builder_api_module {
         pipeline.pipe(next)
     }
 
-    #[rhai_fn(name = "exec")]
-    pub fn pipeline_exec(pipeline: PipeBuilder) -> PipelineExecutor {
-        pipeline.exec()
+    #[rhai_fn(name = "build")]
+    pub fn pipeline_build(pipeline: PipeBuilder) -> PipelineExecutor {
+        pipeline.build()
     }
 
     #[rhai_fn(name = "cwd", return_raw)]
@@ -136,8 +136,8 @@ pub mod builder_api_module {
         executor.allow_exit_codes(codes)
     }
 
-    #[rhai_fn(name = "capture", return_raw)]
-    pub fn executor_capture(executor: PipelineExecutor) -> crate::RhaiResult<RhaiMap> {
-        executor.capture()
+    #[rhai_fn(name = "run", return_raw)]
+    pub fn executor_run(executor: PipelineExecutor) -> crate::RhaiResult<RhaiMap> {
+        executor.run()
     }
 }

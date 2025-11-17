@@ -7,8 +7,8 @@
 ```rhai
 let result = cmd(["ls"])
                 .pipe(cmd(["grep", "Cargo.toml"]))
-                .exec()
-                .capture();
+                .build()
+                .run();
 
 if result.success {
     print(result.stdout);
@@ -30,8 +30,8 @@ fn main() -> Result<(), Box<EvalAltResult>> {
     let contents = engine.eval::<String>(r#"
         let result = cmd(["ls"])
                         .pipe(cmd(["grep", "Cargo.toml"]))
-                        .exec()
-                        .capture();
+                        .build()
+                        .run();
 
         if result.success {
             result.stdout
@@ -58,7 +58,7 @@ Host applications use `Config` to control what Rhai scripts may execute.
 ```rhai
   let run = cmd(["cargo", "build"])
                 .env(#{ "RUSTFLAGS": "-Dwarnings" })
-                .exec()
+                .build()
                 .cwd(repo_dir);
 ```
 | Method | Description |
@@ -66,13 +66,13 @@ Host applications use `Config` to control what Rhai scripts may execute.
 | `cmd([cmd, opt, ...])` | Create a builder by passing the program name and arguments as an array. |
 | `env(map)` / `env_var(key, value)` | Inject environment variables (collectively or individually). Keys must be allowed by `Config`. |
 | `pipe(other_builder)` | Append another `CommandBuilder` via a pipe and return a `PipeBuilder`. |
-| `exec()` | Turn this single command into an `Executor`, which exposes timeout/exit-code controls and `capture()`. |
+| `build()` | Turn this single command into an `Executor`, which exposes timeout/exit-code controls and `run()`. |
 
 ## PipeBuilder
 | Method | Description |
 | ------ | ----------- |
 | `pipe(other_builder)` | Attach another command to the current pipeline. |
-| `exec()` | Convert the pipeline into an `Executor`. |
+| `build()` | Convert the pipeline into an `Executor`. |
 
 ## Executor
 | Method | Description |
@@ -80,10 +80,10 @@ Host applications use `Config` to control what Rhai scripts may execute.
 | `timeout(ms)` | Override the pipeline-wide timeout in milliseconds (`Config::default_timeout_ms` is used otherwise). |
 | `cwd(path)` | Set the working directory for the entire pipeline. |
 | `allow_exit_codes(array)` | Treat the listed exit codes as successes. |
-| `capture()` | Execute the pipeline and return `#{ success, status, stdout, stderr, duration_ms }`. |
+| `run()` | Execute the pipeline and return `#{ success, status, stdout, stderr, duration_ms }`. |
 
 ## Handling results
-- `capture()` is the sole terminal API. It returns `#{ success, status, stdout, stderr, duration_ms }`; check `success` (or inspect `stderr`) and raise your own error if needed. I/O errors or timeouts still surface as `EvalAltResult`.
+- `run()` is the terminal API. It returns `#{ success, status, stdout, stderr, duration_ms }`; check `success` (or inspect `stderr`) and raise your own error if needed. I/O errors or timeouts still surface as `EvalAltResult`.
 
 ## License
 Dual-licensed under MIT or Apache-2.0.

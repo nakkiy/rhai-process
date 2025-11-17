@@ -34,7 +34,7 @@ impl PipeBuilder {
         Ok(self)
     }
 
-    pub fn exec(self) -> PipelineExecutor {
+    pub fn build(self) -> PipelineExecutor {
         self.into_executor()
     }
 }

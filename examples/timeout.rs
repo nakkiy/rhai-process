@@ -10,14 +10,14 @@ fn main() -> Result<(), Box<EvalAltResult>> {
 
     let contents = engine.eval::<String>(
         r#"
-        let result = cmd(["sleep", "2"])
-                        .exec()
-                        .timeout(1_000)
-                        .capture();
-
-        if result.success {
-            result.stdout
-        }
+        try {
+            cmd(["sleep", "2"])
+                .build()
+                .timeout(1_000)
+                .run()
+        } catch {
+            return "Process timed out".to_string();
+        };
         "#,
     )?;
     println!("{}", contents);
