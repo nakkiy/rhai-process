@@ -57,7 +57,7 @@ impl PipelineExecutor {
                 .clone()
                 .try_cast::<INT>()
                 .ok_or_else(|| runtime_error("allow_exit_codes expects integers"))?;
-            set.insert(value as i64);
+            set.insert(value);
         }
         self.allowed_exit_codes = normalize_exit_codes(set);
         Ok(self)
@@ -174,6 +174,7 @@ fn run_pipeline_stream(
         .unchecked();
 
     let handle = expression.start().map_err(map_io_err)?;
+    drop(expression);
     let start = Instant::now();
     let (tx, rx) = mpsc::channel();
     spawn_stream_reader(stdout_reader, tx.clone(), StreamKind::Stdout);
@@ -181,6 +182,7 @@ fn run_pipeline_stream(
 
     let mut stdout_open = true;
     let mut stderr_open = true;
+    let mut process_finished = false;
 
     while stdout_open || stderr_open {
         if let Some(limit) = timeout_ms {
@@ -212,8 +214,8 @@ fn run_pipeline_stream(
                 return Err(map_io_err(err));
             }
             Err(RecvTimeoutError::Timeout) => {
-                if handle.try_wait().map_err(map_io_err)?.is_some() {
-                    break;
+                if !process_finished && handle.try_wait().map_err(map_io_err)?.is_some() {
+                    process_finished = true;
                 }
                 continue;
             }
@@ -272,7 +274,7 @@ fn run_with_timeout(expr: Expression, limit: Duration) -> io::Result<std::proces
     loop {
         if let Some(output) = handle.try_wait()? {
             return Ok(std::process::Output {
-                status: output.status.clone(),
+                status: output.status,
                 stdout: output.stdout.clone(),
                 stderr: output.stderr.clone(),
             });

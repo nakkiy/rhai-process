@@ -10,10 +10,9 @@ fn main() -> Result<(), Box<EvalAltResult>> {
 
     let contents = engine.eval::<String>(
         r#"
-        let result = cmd(["ls"])
-                        .pipe(cmd(["grep", "Cargo.toml"]))
+        let result = cmd(["docker", "run", "--rm", "-it", "--name", "demo", "alpine:3.20", "/bin/sh"])
                         .build()
-                        .run();
+                        .run_stream();
 
         if result.success {
             result.stdout
