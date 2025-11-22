@@ -1,5 +1,6 @@
-use rhai::{Engine, EvalAltResult};
+use rhai::{Engine, EvalAltResult, ImmutableString};
 use rhai_process::{module, register, Config};
+use std::sync::{Arc, Mutex};
 use tempfile::tempdir;
 
 fn engine_with(config: Config) -> Engine {
@@ -217,4 +218,51 @@ fn per_command_timeout_applies() {
 #[should_panic(expected = "default_timeout_ms must be greater than zero")]
 fn default_timeout_zero_rejected() {
     let _ = Config::default().default_timeout_ms(0);
+}
+
+#[test]
+fn run_stream_returns_empty_buffers() -> Result<(), Box<EvalAltResult>> {
+    let engine = engine_with(Config::default());
+    let script = r#"
+        let result = process::cmd(["python3", "-c", "print('hi')"])
+            .build()
+            .run_stream();
+        result.stdout == "" && result.stderr == "" && result.success
+    "#;
+    assert!(eval_bool(&engine, script)?);
+    Ok(())
+}
+
+#[test]
+fn run_stream_invokes_callbacks() -> Result<(), Box<EvalAltResult>> {
+    let stdout_log = Arc::new(Mutex::new(Vec::<String>::new()));
+    let stderr_log = Arc::new(Mutex::new(Vec::<String>::new()));
+    let mut engine = engine_with(Config::default());
+
+    {
+        let log = stdout_log.clone();
+        engine.register_fn("record_out", move |text: ImmutableString| {
+            log.lock().unwrap().push(text.into());
+        });
+    }
+
+    {
+        let log = stderr_log.clone();
+        engine.register_fn("record_err", move |text: ImmutableString| {
+            log.lock().unwrap().push(text.into());
+        });
+    }
+
+    let script = r#"
+        fn out_cb(text) { record_out(text); }
+        fn err_cb(text) { record_err(text); }
+        let result = process::cmd(["python3", "-c", "import sys; sys.stdout.write('foo'); sys.stderr.write('bar')"])
+            .build()
+            .run_stream(out_cb, err_cb);
+        result.success
+    "#;
+    assert!(eval_bool(&engine, script)?);
+    assert!(!stdout_log.lock().unwrap().is_empty());
+    assert!(!stderr_log.lock().unwrap().is_empty());
+    Ok(())
 }

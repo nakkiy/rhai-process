@@ -3,10 +3,12 @@ use crate::config::Config;
 use crate::util::{map_io_err, normalize_exit_codes, runtime_error};
 use crate::{RhaiArray, RhaiResult};
 use duct::{self, Expression};
-use rhai::{Dynamic, Map as RhaiMap, INT};
+use os_pipe::PipeReader;
+use rhai::{Dynamic, FnPtr, ImmutableString, Map as RhaiMap, NativeCallContext, INT};
 use std::collections::HashSet;
-use std::io;
+use std::io::{self, ErrorKind, Read, Write};
 use std::path::PathBuf;
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -71,6 +73,25 @@ impl PipelineExecutor {
         )?;
         Ok(result.into_map())
     }
+
+    pub fn run_stream(
+        self,
+        context: &NativeCallContext,
+        stdout_cb: Option<FnPtr>,
+        stderr_cb: Option<FnPtr>,
+    ) -> RhaiResult<RhaiMap> {
+        let timeout = self.timeout_override_ms.or(self.config.default_timeout_ms);
+        let result = run_pipeline_stream(
+            &self.commands,
+            timeout,
+            self.allowed_exit_codes.clone(),
+            self.cwd,
+            context,
+            stdout_cb,
+            stderr_cb,
+        )?;
+        Ok(result.into_map())
+    }
 }
 
 #[derive(Debug)]
@@ -131,6 +152,96 @@ fn run_pipeline(
     })
 }
 
+fn run_pipeline_stream(
+    commands: &[CommandSpec],
+    timeout_ms: Option<u64>,
+    allowed_exit_codes: Option<HashSet<i64>>,
+    cwd: Option<PathBuf>,
+    context: &NativeCallContext,
+    stdout_cb: Option<FnPtr>,
+    stderr_cb: Option<FnPtr>,
+) -> RhaiResult<ProcessResult> {
+    if commands.is_empty() {
+        return Err(runtime_error("no command specified"));
+    }
+
+    let mut expression = build_expression(commands, cwd.as_ref())?;
+    let (stdout_reader, stdout_writer) = os_pipe::pipe().map_err(map_io_err)?;
+    let (stderr_reader, stderr_writer) = os_pipe::pipe().map_err(map_io_err)?;
+    expression = expression
+        .stdout_file(stdout_writer)
+        .stderr_file(stderr_writer)
+        .unchecked();
+
+    let handle = expression.start().map_err(map_io_err)?;
+    let start = Instant::now();
+    let (tx, rx) = mpsc::channel();
+    spawn_stream_reader(stdout_reader, tx.clone(), StreamKind::Stdout);
+    spawn_stream_reader(stderr_reader, tx, StreamKind::Stderr);
+
+    let mut stdout_open = true;
+    let mut stderr_open = true;
+
+    while stdout_open || stderr_open {
+        if let Some(limit) = timeout_ms {
+            if start.elapsed() >= Duration::from_millis(limit) {
+                handle.kill().ok();
+                return Err(map_io_err(io::Error::new(
+                    ErrorKind::TimedOut,
+                    "process execution timed out",
+                )));
+            }
+        }
+
+        match rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(StreamMessage::Data(kind, chunk)) => {
+                dispatch_stream_chunk(
+                    kind,
+                    &chunk,
+                    context,
+                    stdout_cb.as_ref(),
+                    stderr_cb.as_ref(),
+                )?;
+            }
+            Ok(StreamMessage::Eof(kind)) => match kind {
+                StreamKind::Stdout => stdout_open = false,
+                StreamKind::Stderr => stderr_open = false,
+            },
+            Ok(StreamMessage::Error(err)) => {
+                handle.kill().ok();
+                return Err(map_io_err(err));
+            }
+            Err(RecvTimeoutError::Timeout) => {
+                if handle.try_wait().map_err(map_io_err)?.is_some() {
+                    break;
+                }
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+    }
+
+    let duration = start.elapsed();
+    let output = handle.wait().map_err(map_io_err)?;
+    let exit_code = output.status.code().map(|c| c as i64).unwrap_or(-1);
+    let mut success = output.status.success();
+    if !success {
+        if let Some(allowed) = allowed_exit_codes.as_ref() {
+            if allowed.contains(&exit_code) {
+                success = true;
+            }
+        }
+    }
+
+    Ok(ProcessResult {
+        success,
+        status: exit_code,
+        stdout: String::new(),
+        stderr: String::new(),
+        duration_ms: duration.as_millis().try_into().unwrap_or(u64::MAX),
+    })
+}
+
 fn build_expression(commands: &[CommandSpec], cwd: Option<&PathBuf>) -> RhaiResult<Expression> {
     let mut iter = commands.iter();
     let first = iter
@@ -176,4 +287,77 @@ fn run_with_timeout(expr: Expression, limit: Duration) -> io::Result<std::proces
         }
         thread::sleep(Duration::from_millis(10));
     }
+}
+
+#[derive(Copy, Clone)]
+enum StreamKind {
+    Stdout,
+    Stderr,
+}
+
+enum StreamMessage {
+    Data(StreamKind, Vec<u8>),
+    Eof(StreamKind),
+    Error(io::Error),
+}
+
+fn spawn_stream_reader(reader: PipeReader, sender: Sender<StreamMessage>, kind: StreamKind) {
+    thread::spawn(move || {
+        let mut reader = reader;
+        let mut buffer = [0u8; 8 * 1024];
+        loop {
+            match reader.read(&mut buffer) {
+                Ok(0) => {
+                    let _ = sender.send(StreamMessage::Eof(kind));
+                    break;
+                }
+                Ok(n) => {
+                    if sender
+                        .send(StreamMessage::Data(kind, buffer[..n].to_vec()))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+                Err(ref err) if err.kind() == ErrorKind::Interrupted => continue,
+                Err(err) => {
+                    let _ = sender.send(StreamMessage::Error(err));
+                    break;
+                }
+            }
+        }
+    });
+}
+
+fn dispatch_stream_chunk(
+    kind: StreamKind,
+    chunk: &[u8],
+    context: &NativeCallContext,
+    stdout_cb: Option<&FnPtr>,
+    stderr_cb: Option<&FnPtr>,
+) -> RhaiResult<()> {
+    let text = String::from_utf8_lossy(chunk).to_string();
+    let value: ImmutableString = text.clone().into();
+
+    let target = match kind {
+        StreamKind::Stdout => stdout_cb,
+        StreamKind::Stderr => stderr_cb,
+    };
+
+    if let Some(callback) = target {
+        let _ = callback.call_within_context::<Dynamic>(context, (value,))?;
+    } else {
+        match kind {
+            StreamKind::Stdout => {
+                print!("{}", text);
+                let _ = io::stdout().flush();
+            }
+            StreamKind::Stderr => {
+                eprint!("{}", text);
+                let _ = io::stderr().flush();
+            }
+        }
+    }
+
+    Ok(())
 }
