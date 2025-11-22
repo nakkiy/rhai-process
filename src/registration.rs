@@ -5,7 +5,7 @@ use crate::pipeline_executor::PipelineExecutor;
 use crate::RhaiArray;
 use rhai::packages::Package;
 use rhai::plugin::*;
-use rhai::{Engine, ImmutableString, Map as RhaiMap, Module, Shared};
+use rhai::{Engine, FnPtr, ImmutableString, Map as RhaiMap, Module, NativeCallContext, Shared};
 use std::sync::Arc;
 
 pub fn module(config: Config) -> Module {
@@ -139,5 +139,32 @@ pub mod builder_api_module {
     #[rhai_fn(name = "run", return_raw)]
     pub fn executor_run(executor: PipelineExecutor) -> crate::RhaiResult<RhaiMap> {
         executor.run()
+    }
+
+    #[rhai_fn(name = "run_stream", return_raw)]
+    pub fn executor_run_stream_default(
+        context: NativeCallContext,
+        executor: PipelineExecutor,
+    ) -> crate::RhaiResult<RhaiMap> {
+        executor.run_stream(&context, None, None)
+    }
+
+    #[rhai_fn(name = "run_stream", return_raw)]
+    pub fn executor_run_stream_stdout(
+        context: NativeCallContext,
+        executor: PipelineExecutor,
+        stdout_cb: FnPtr,
+    ) -> crate::RhaiResult<RhaiMap> {
+        executor.run_stream(&context, Some(stdout_cb), None)
+    }
+
+    #[rhai_fn(name = "run_stream", return_raw)]
+    pub fn executor_run_stream_both(
+        context: NativeCallContext,
+        executor: PipelineExecutor,
+        stdout_cb: FnPtr,
+        stderr_cb: FnPtr,
+    ) -> crate::RhaiResult<RhaiMap> {
+        executor.run_stream(&context, Some(stdout_cb), Some(stderr_cb))
     }
 }

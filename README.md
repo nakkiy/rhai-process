@@ -80,9 +80,10 @@ Host applications use `Config` to control what Rhai scripts may execute.
 | `cwd(path)` | Set the working directory for the entire pipeline. |
 | `allow_exit_codes(array)` | Treat the listed exit codes as successes. |
 | `run()` | Execute the pipeline and return `#{ success, status, stdout, stderr, duration_ms }`. |
+| `run_stream(stdout_fn?, stderr_fn?)` | Stream stdout/stderr in real time (defaults to printing directly) and return the same result map. `stdout` / `stderr` in the result are empty strings. |
 
 ## Handling results
-- `run()` is the terminal API. It returns `#{ success, status, stdout, stderr, duration_ms }`; check `success` (or inspect `stderr`) and raise your own error if needed. I/O errors or timeouts still surface as `EvalAltResult`.
+- `run()` (or `run_stream()`) is the terminal API. Both return `#{ success, status, stdout, stderr, duration_ms }`; check `success` (or inspect `stderr`) and raise your own error if needed. `run_stream()` streams stdout/stderr directly, so the `stdout`/`stderr` fields in the result are empty strings.
 
 ## License
 Dual-licensed under MIT or Apache-2.0.
