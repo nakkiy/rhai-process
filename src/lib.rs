@@ -8,7 +8,10 @@ mod pipeline_executor;
 mod registration;
 mod util;
 
+pub use command_builder::CommandBuilder;
 pub use config::Config;
+pub use pipe_builder::PipeBuilder;
+pub use pipeline_executor::PipelineExecutor;
 pub use registration::{builder_module, module, register, ProcessPackage};
 
 #[cfg(feature = "no_index")]
