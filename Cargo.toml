@@ -20,6 +20,7 @@ metadata = ["rhai/metadata"]
 [dependencies]
 rhai = { version = "1.23" }
 duct = "0.13"
+os_pipe = "1"
 
 [dev-dependencies]
 tempfile = "3"
