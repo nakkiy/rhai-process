@@ -269,25 +269,35 @@ fn expression_from_spec(spec: &CommandSpec, cwd: Option<&PathBuf>) -> Expression
 }
 
 fn run_with_timeout(expr: Expression, limit: Duration) -> io::Result<std::process::Output> {
-    let handle = expr.start()?;
-    let start = Instant::now();
-    loop {
-        if let Some(output) = handle.try_wait()? {
-            return Ok(std::process::Output {
+    let handle = Arc::new(expr.start()?);
+    drop(expr);
+
+    let wait_handle = Arc::clone(&handle);
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let result = wait_handle
+            .wait()
+            .map(|output| std::process::Output {
                 status: output.status,
                 stdout: output.stdout.clone(),
                 stderr: output.stderr.clone(),
             });
-        }
+        let _ = tx.send(result);
+    });
 
-        if start.elapsed() >= limit {
+    match rx.recv_timeout(limit) {
+        Ok(result) => result,
+        Err(RecvTimeoutError::Timeout) => {
             handle.kill()?;
-            return Err(io::Error::new(
+            Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 "process execution timed out",
-            ));
+            ))
         }
-        thread::sleep(Duration::from_millis(10));
+        Err(RecvTimeoutError::Disconnected) => Err(io::Error::new(
+            io::ErrorKind::Other,
+            "process execution failed",
+        )),
     }
 }
 
